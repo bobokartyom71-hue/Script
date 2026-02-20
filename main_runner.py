@@ -305,6 +305,7 @@ class DeviceHandler:
                 or line.strip().startswith("Error:")
                 or "bad command" in line
                 or "error" in line
+                or "BGP is already running" in line
             ):
                 logging.error(
                     f"{host} | CONFIG ERROR | {line.strip()}"
@@ -372,7 +373,6 @@ class CiscoHandler(DeviceHandler):
             data = self.parse_vty(output)
             if data:
                 parsed.update(data)
-
         return parsed
 
     # ----------------- parsers -----------------
@@ -380,6 +380,9 @@ class CiscoHandler(DeviceHandler):
     def parse_subnet(self, output: str) -> dict:
         m = re.search(r"\d+\.\d+\.\d+\.\d+", output)
         if not m:
+            logging.error(
+                    f"{self.device['host']} | PARSING ERROR | DATA NOT PARSED"
+                )
             return {}
 
         ip = m.group()
@@ -388,9 +391,11 @@ class CiscoHandler(DeviceHandler):
             return {"subnet": ".".join(ip.split(".")[:3])}
 
         if self.args.get("coco"):
-            parts = ip.split(".")
-            parts[3] = str(int(parts[3]) - 1)
-            return {"subnet": ".".join(parts)}
+            parts1 = ip.split(".")
+            parts2 = ip.split(".")
+            parts1[3] = str(int(parts1[3]) - 1)
+            return {"subnet": ".".join(parts1),
+                    "gw": ".".join(parts2)}
 
         return {}
 
@@ -446,11 +451,12 @@ class CiscoHandler(DeviceHandler):
 
     def build_subnet_config(self, parsed: dict) -> list[str]:
         subnet = parsed.get("subnet")
+        gw = parsed.get("gw")
         if not subnet:
             return []
 
         tmpl = self.commands.get("config_template", [])
-        return [cmd.format(subnet=subnet) for cmd in tmpl]
+        return [cmd.format(subnet=subnet, gw=gw) for cmd in tmpl]
 
 
 class HuaweiHandler(DeviceHandler):
@@ -480,16 +486,21 @@ class HuaweiHandler(DeviceHandler):
     def parse_subnet(self, output: str) -> dict:
         m = re.search(r"\d+\.\d+\.\d+\.\d+", output)
         if not m:
+            logging.error(
+                    f"{self.device['host']} | PARSING ERROR | DATA NOT PARSED"
+                )
             return {}
 
         ip = m.group()
 
         if self.args.get("coco"):
-            parts = ip.split(".")
-            parts[3] = str(int(parts[3]) - 1)
-            return {"subnet": ".".join(parts)}
-
+            parts1 = ip.split(".")
+            parts2 = ip.split(".")
+            parts1[3] = str(int(parts1[3]) - 1)
+            return {"subnet": ".".join(parts1),
+                    "gw": ".".join(parts2)}
         return {}
+
 
     def parse_vty(self, output: str) -> dict:
         """
@@ -545,12 +556,13 @@ class HuaweiHandler(DeviceHandler):
 
     def build_subnet_config(self, parsed: dict) -> list[str]:
         subnet = parsed.get("subnet")
+        gw = parsed.get("gw")
         if not subnet:
             return []
 
         tmpl = self.commands.get("config_template", [])
         return [
-            cmd.format(subnet=subnet)
+            cmd.format(subnet=subnet, gw=gw)
             for cmd in tmpl
         ]
 
@@ -576,6 +588,9 @@ class MikrotikHandler(DeviceHandler):
     def parse_subnet(self, output: str) -> dict:
         m = re.search(r"\d+\.\d+\.\d+\.\d+", output)
         if not m:
+            logging.error(
+                    f"{self.device['host']} | PARSING ERROR | DATA NOT PARSED"
+                )
             return {}
 
         ip = m.group()
@@ -760,7 +775,7 @@ def azs_id_from_hostname(hostname: str) -> int:
             return None
         return int(m.group(1) + m.group(2))
     elif ("CORO" in hostname):
-        m = re.search(r"^[A-Z]+-[A-Z]+-(\d{3})-[A-Z]+-(\d{3})-[A-Z]+$", hostname)
+        m = re.search(r"^[A-Z]+-[A-Z]+-(\d{2,3})-[A-Z]+-(\d{3})-[A-Z]+$", hostname)
         if not m:
             return None
         return int(m.group(1) + m.group(2))
@@ -811,7 +826,6 @@ def load_hosts_from_netbox(args: dict) -> dict:
             platform = d["platform"]["display"]
             ip = d["primary_ip"]["address"].split("/")[0]
             hostname = d.get("name") or d.get("display") or ""
-            #print(hostname)
         except (TypeError, KeyError):
             continue
 

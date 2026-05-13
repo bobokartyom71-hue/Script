@@ -93,18 +93,6 @@ python main_runner.py --coco --RU
 python main_runner.py --copo --KZ --hostsfile hostsfile
 ```
 
-VTY-режим для Huawei/Cisco с фильтром по роли:
-
-```bash
-python main_runner.py --vty --RU --role 1
-```
-
-Тестовая генерация команд без SSH-подключений:
-
-```bash
-python main_runner.py --force --test --coco
-```
-
 ## Логи и результаты
 
 - Основной лог: `result_YYYY-MM-DD_HH-MM-SS.log`
